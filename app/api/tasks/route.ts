@@ -5,87 +5,91 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth check — must be a logged-in provider
+    // Auth check
     const { data: { user }, error: authErr } = await supabase.auth.getUser()
     if (authErr || !user) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get fresh session token to pass to FastAPI
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      return NextResponse.json({ message: 'No session' }, { status: 401 })
+    }
+
     const body = await req.json()
     const {
       name, description, model_type, framework, gpu_min,
-      encrypted_file_url, encrypted_file_key,
+      batch_urls, encrypted_file_key,
       entry_point, requirements_file,
       total_batches, price_per_batch, max_workers,
       provider_wallet,
     } = body
 
-    // Basic server-side validation
-    if (!name || !model_type || !framework || !encrypted_file_url || !provider_wallet) {
+    // Validation
+    if (!name || !model_type || !framework || !batch_urls?.length || !provider_wallet) {
       return NextResponse.json({ message: 'Missing required fields' }, { status: 400 })
     }
 
-    // Insert task row
-    const { data: task, error: taskErr } = await supabase
-      .from('tasks')
-      .insert({
-        provider_id: user.id,
-        provider_wallet,
-        name,
-        description,
-        model_type,
-        framework,
-        gpu_min,
-        encrypted_file_url,
-        encrypted_file_key,  // RSA-wrapped AES key
-        entry_point,
-        requirements_file,
-        total_batches,
-        price_per_batch,
-        max_workers,
-        status: 'pending',   // → 'active' after escrow confirmed
-      })
-      .select()
-      .single()
-
-    if (taskErr || !task) {
-      console.error('Task insert error:', taskErr)
-      return NextResponse.json({ message: 'Failed to create task' }, { status: 500 })
+    if (batch_urls.length > 50) {
+      return NextResponse.json({ message: 'Maximum 50 batches allowed' }, { status: 400 })
     }
 
-    // Trigger FastAPI batch splitter async — fire and forget
-    // The splitter reads the encrypted file, divides it into N batch manifest rows
-    fetch(`${process.env.FASTAPI_URL}/internal/split-batches`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Internal-Secret': process.env.INTERNAL_SECRET!,
-      },
-      body: JSON.stringify({
-        task_id: task.id,
-        total_batches,
-        encrypted_file_url,
-        encrypted_file_key,
-      }),
-    }).catch((e) => console.error('Batch splitter trigger failed:', e))
+    // Forward to FastAPI with Supabase JWT
+    const fastapiRes = await fetch(
+      `${process.env.FASTAPI_URL}/api/tasks/provider`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          name,
+          description,
+          model_type,
+          framework,
+          gpu_min,
+          batch_urls,
+          encrypted_file_key,
+          entry_point,
+          requirements_file,
+          total_batches,
+          price_per_batch,
+          max_workers,
+          provider_wallet,
+        }),
+      }
+    )
 
+    if (!fastapiRes.ok) {
+      const err = await fastapiRes.json()
+      return NextResponse.json(
+        { message: err.detail || 'FastAPI error' },
+        { status: fastapiRes.status }
+      )
+    }
+
+    const result = await fastapiRes.json()
     return NextResponse.json({
-      taskId: task.id,
-      escrowTx: 'pending', // updated by Solana webhook once escrow tx confirms
+      taskId: result.task_id,
+      escrowTx: 'pending',
     })
+
   } catch (err) {
     console.error('POST /api/tasks error:', err)
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 })
   }
 }
+
 export async function GET() {
   const supabase = await createClient()
-  
-  const { data, error } = await supabase
-    .from('tasks')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const res = await fetch(`${process.env.FASTAPI_URL}/api/tasks/`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  })
+  const data = await res.json()
   return NextResponse.json(data)
 }

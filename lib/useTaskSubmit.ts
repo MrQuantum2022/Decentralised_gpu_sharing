@@ -14,6 +14,13 @@ export function useTaskSubmit() {
     setLoading(true)
     setError(null)
     try {
+      if (!data.batchUrls || data.batchUrls.length === 0) {
+        throw new Error('No batches uploaded. Please complete the dataset upload step.')
+      }
+      if (!data.encryptedFileKey) {
+        throw new Error('Encryption key missing. Please re-upload the dataset.')
+      }
+
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -23,7 +30,7 @@ export function useTaskSubmit() {
           model_type: data.modelType,
           framework: data.framework,
           gpu_min: data.gpuMin,
-          encrypted_file_url: data.encryptedFileUrl,
+          batch_urls: data.batchUrls,
           encrypted_file_key: data.encryptedFileKey,
           entry_point: data.entryPoint,
           requirements_file: data.requirementsFile,
@@ -33,6 +40,7 @@ export function useTaskSubmit() {
           provider_wallet: data.walletAddress,
         }),
       })
+
       if (!res.ok) {
         const body = await res.json()
         throw new Error(body.message ?? 'Task creation failed')

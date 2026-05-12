@@ -19,8 +19,9 @@ export interface WizardData {
   framework: Framework | ''
   gpuMin: string
   // Step 2
-  encryptedFileKey: string | null   // AES-256 key wrapped with backend pubkey
-  encryptedFileUrl: string | null   // Supabase storage URL of encrypted blob
+  encryptedFileKey: string | null   // AES key RSA-wrapped
+  encryptedFileUrl: string | null   // first batch URL (compat)
+  batchUrls: string[]               // all batch URLs in order
   fileName: string | null
   entryPoint: string
   requirementsFile: string
@@ -49,10 +50,11 @@ const INITIAL: WizardData = {
   gpuMin: 'Any GPU',
   encryptedFileKey: null,
   encryptedFileUrl: null,
+  batchUrls: [],
   fileName: null,
   entryPoint: 'train.py',
   requirementsFile: 'requirements.txt',
-  totalBatches: 50,
+  totalBatches: 5,
   pricePerBatch: 1.5,
   maxWorkers: 20,
   walletAddress: null,

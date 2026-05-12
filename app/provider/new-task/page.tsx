@@ -11,7 +11,7 @@ import { Step4_ReviewPublish } from './_components/Step4_ReviewPublish'
 import { step1Schema, step2Schema, step3Schema, step4Schema } from '@/lib/formSchema'
 import { useTaskSubmit } from '@/lib/useTaskSubmit'
 
-const STEPS = ['Task details', 'Dataset upload', 'Pricing', 'Review']
+const STEPS = ['Task details', 'Pricing', 'Dataset upload', 'Review']
 
 function WizardInner() {
   const router = useRouter()
@@ -25,8 +25,8 @@ function WizardInner() {
     setValidationError(null)
     try {
       if (step === 0) step1Schema.parse(data)
-      if (step === 1) step2Schema.parse(data)
-      if (step === 2) step3Schema.parse(data)
+      if (step === 1) step3Schema.parse(data)
+      if (step === 2) step2Schema.parse(data)
       if (step === 3) step4Schema.parse(data)
       return true
     } catch (e: any) {
@@ -146,8 +146,8 @@ function WizardInner() {
         {/* Step card */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 mb-4">
           {step === 0 && <Step1_TaskDetails />}
-          {step === 1 && <Step2_DatasetUpload />}
-          {step === 2 && <Step3_PricingConfig />}
+          {step === 1 && <Step3_PricingConfig />}
+          {step === 2 && <Step2_DatasetUpload />}
           {step === 3 && <Step4_ReviewPublish />}
         </div>
 
